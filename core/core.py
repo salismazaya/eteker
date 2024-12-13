@@ -51,8 +51,12 @@ class Core(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def transfer(self, receipent: str, amount: float) -> str:
+    async def transfer(self, receipent: str, amount: float, *args, **kwargs) -> str:
         raise NotImplementedError
+
+    # @abstractmethod
+    # async def is_transaction_completed(self, tx_hash: str) -> bool:
+    #     raise NotImplementedError
 
     def add_explorer(self, tx_hash: str):
         return tx_hash

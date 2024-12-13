@@ -5,8 +5,10 @@ from web3 import AsyncWeb3, Account
 from core import constants
 from helpers.redis import redis_client
 from helpers.decorators import cache_redis
-import re
+import re, asyncio
 import exceptions.transaction
+
+transaction_lock = asyncio.Lock() 
 
 class EvmCore(Core):
     def __init__(self):
@@ -84,10 +86,11 @@ class EvmCore(Core):
     
     async def get_nonce(self, address = None):
         chain_id = await self.get_chain_id()
-        nonce = int(await redis_client.get(f'nonce_evm_{chain_id}_{address}') or 0)
-        if nonce < 0:
-            nonce = await self.get_current_nonce()
-            await redis_client.set(f'nonce_{chain_id}:{address}', nonce)
+        async with transaction_lock:
+            nonce = int(await redis_client.get(f'nonce_evm_{chain_id}:{address}') or 0)
+            if nonce < 0:
+                nonce = await self.get_current_nonce()
+                await redis_client.set(f'nonce_evm_{chain_id}:{address}', nonce)
 
         return nonce
     
@@ -111,16 +114,18 @@ class EvmCore(Core):
         }
         return transaction
 
-    async def transfer(self, receipent: str, amount: float) -> str:
+    async def transfer(self, receipent: str, amount: float, gas: int = 2100) -> str:
         try:
-            transaction = await self.generate_trx(receipent, amount)
+            transaction = await self.generate_trx(receipent, amount, gas)
             signed_transaction = self.w3.eth.account.sign_transaction(transaction, self.get_private_key())
             tx_hash = await self.w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
             tx_hash_hex = tx_hash.hex()
 
             chain_id = await self.get_chain_id()
             address = self.get_address()
-            await redis_client.incr(f'nonce_{chain_id}:{address}')
+
+            async with transaction_lock:
+                await redis_client.incr(f'nonce_evm_{chain_id}:{address}')
 
             return tx_hash_hex
         
