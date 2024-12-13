@@ -1,0 +1,4 @@
+fastapi[standard]
+web3==6.*
+redis
+aiohttp
